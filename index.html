@@ -212,7 +212,7 @@ function hideError()    { errorMsg.classList.remove('show'); }
 function parseExcel(buffer) {
   const wb = XLSX.read(buffer, { type:'array', cellDates:true });
   const td = wb.Sheets['Treasury_Dashboard'];
-  const calc = wb.Sheets['Calculation'];
+  const calc = wb.Sheets['Calculation'] || wb.Sheets['Calculation (Last Version)'] || null;
   if (!td) throw new Error('Sheet "Treasury_Dashboard" tidak ditemukan');
 
   const g = (sheet, r, c) => {
@@ -227,7 +227,7 @@ function parseExcel(buffer) {
 
   // KPI
   const netRevenue      = g(td,5,5)  || 0;
-  const pretaxRevenue   = g(td,4,5)  || 0;
+  const pretaxRevenue   = calc ? (calc[XLSX.utils.encode_cell({r:0,c:39})]?.v || 0) : 0;
   const hedgingPerf     = g(td,5,7)  || 0;
   const feeRevenue      = g(td,23,2) || 0;
   const winRate         = g(td,5,11) || 0;
@@ -250,7 +250,7 @@ function parseExcel(buffer) {
   // Avg duration & overduration (from hedging breakdown)
   const avgDuration  = g(td,23,15) || 0;
   const overduration = g(td,23,16) || 0;
-  const profitRatio  = g(calc ? 'Calculation' : 'Treasury_Dashboard', 1, 61) || 0;
+  const profitRatio  = calc ? (calc[XLSX.utils.encode_cell({r:0,c:60})]?.v || 0) : 0;
 
   // Duty
   const duty = [
@@ -550,8 +550,21 @@ function generateHTML(d, note) {
   .footer-gen{font-size:10px;color:var(--muted-lt);}
 
   @media print {
-    body{padding:16px 20px;background:white;}
-    @page{size:A4 landscape;margin:12mm;}
+    @page{size:A4 landscape;margin:5mm;}
+    .no-print{display:none!important;}
+    html{zoom:0.75;}
+    body{padding:6px 8px;background:white;}
+    .grid-3,.grid-2{gap:8px;margin-bottom:8px;}
+    .card{padding:11px 13px;}
+    .kpi-banner{margin-bottom:10px;}
+    .kpi{padding:10px 14px;}
+    .hdr{margin-bottom:10px;padding-bottom:10px;}
+    .hl{padding:6px 0;}
+    .stat{padding:4px 0;}
+    .gauge-wrap,.wr-num{font-size:32px!important;}
+    .bars{height:70px!important;}
+    .peak-box{margin-top:6px;padding:5px 8px;}
+    .footer{margin-top:8px;padding-top:8px;}
   }
 </style>
 </head>
@@ -692,18 +705,19 @@ ${dutyHTML ? `
   <div class="footer-gen">Digenerate otomatis dari data harian Treasury Reku</div>
 </div>` : ''}
 
+<div class="no-print" style="position:fixed;bottom:24px;right:24px;display:flex;gap:10px;z-index:999;">
+  <button onclick="window.history.back()" style="padding:10px 18px;background:white;border:1px solid #e5e7eb;border-radius:8px;font-family:DM Sans,sans-serif;font-size:13px;cursor:pointer;color:#374151;">← Kembali</button>
+  <button onclick="window.print()" style="padding:10px 18px;background:#0e5c4a;border:none;border-radius:8px;font-family:DM Sans,sans-serif;font-size:13px;cursor:pointer;color:white;font-weight:600;">🖨 Print / Export PDF</button>
+</div>
 </body></html>`;
 }
 
 // ── OPEN REPORT ──
 function openReport(html) {
-  const blob = new Blob([html], { type:'text/html' });
-  const url  = URL.createObjectURL(blob);
-  window.open(url, '_blank');
-  setTimeout(() => {
-    document.getElementById('loading').classList.remove('show');
-    document.getElementById('uploadPage').classList.remove('hidden');
-  }, 800);
+  // Replace current page with report (avoids popup blockers)
+  document.open();
+  document.write(html);
+  document.close();
 }
 </script>
 </body>
