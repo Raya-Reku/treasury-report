@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Treasury Report Generator — Reku</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root {
+    --teal:    #0e5c4a;
+    --teal-lt: #1a8c6e;
+    --teal-bg: #eaf6f2;
+    --teal-mid:#d0ece4;
+    --green:   #1db87a;
+    --red:     #d94f4f;
+    --amber:   #d97706;
+    --text:    #111827;
+    --muted:   #6b7280;
+    --border:  #e5e7eb;
+    --bg:      #f9fafb;
+    --white:   #ffffff;
+    --dark:    #0d2b22;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body {
+    font-family:'DM Sans',sans-serif;
+    background:var(--bg); color:var(--text);
+    min-height:100vh; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; padding:40px 20px;
+  }
+
+  /* ── UPLOAD PAGE ── */
+  .upload-wrap { width:100%; max-width:520px; }
+  .upload-logo { display:flex; align-items:center; gap:8px; margin-bottom:32px; justify-content:center; }
+  .upload-logo-mark { width:32px; height:32px; background:var(--teal); border-radius:9px;
+    display:flex; align-items:center; justify-content:center; }
+  .upload-logo-mark svg { width:16px; fill:white; }
+  .upload-logo-name { font-family:'Syne',sans-serif; font-size:22px; font-weight:700; color:var(--teal); }
+
+  .upload-card {
+    background:var(--white); border:1px solid var(--border);
+    border-radius:16px; padding:36px; text-align:center;
+  }
+  .upload-card h1 { font-family:'Syne',sans-serif; font-size:18px; font-weight:700; margin-bottom:6px; }
+  .upload-card p  { font-size:13px; color:var(--muted); margin-bottom:28px; line-height:1.6; }
+
+  .drop-zone {
+    border: 2px dashed var(--teal-mid);
+    border-radius:12px; padding:36px 24px;
+    cursor:pointer; transition:all .2s;
+    background:var(--teal-bg);
+    position:relative;
+  }
+  .drop-zone:hover, .drop-zone.drag { border-color:var(--teal); background:#d8f0e9; }
+  .drop-zone input { position:absolute; inset:0; opacity:0; cursor:pointer; width:100%; }
+  .drop-icon { font-size:32px; margin-bottom:10px; }
+  .drop-title { font-family:'Syne',sans-serif; font-size:14px; font-weight:600; color:var(--teal); margin-bottom:4px; }
+  .drop-sub   { font-size:12px; color:var(--muted); }
+
+  .file-info {
+    display:none; margin-top:16px; padding:12px 16px;
+    background:var(--teal-bg); border:1px solid var(--teal-mid);
+    border-radius:10px; text-align:left;
+    display:none; align-items:center; gap:10px;
+  }
+  .file-info.show { display:flex; }
+  .file-icon { font-size:20px; }
+  .file-name { font-size:13px; font-weight:500; color:var(--teal); }
+  .file-size { font-size:11px; color:var(--muted); }
+
+  .note-wrap { margin-top:20px; text-align:left; }
+  .note-label { font-size:11px; font-weight:600; color:var(--muted); text-transform:uppercase;
+                letter-spacing:.05em; margin-bottom:6px; }
+  .note-input {
+    width:100%; padding:10px 12px; border:1px solid var(--border);
+    border-radius:8px; font-family:'DM Sans',sans-serif; font-size:13px;
+    color:var(--text); resize:none; outline:none; transition:border .2s;
+    background:var(--white);
+  }
+  .note-input:focus { border-color:var(--teal); }
+
+  .gen-btn {
+    margin-top:24px; width:100%; padding:14px;
+    background:var(--teal); color:white; border:none;
+    border-radius:10px; font-family:'Syne',sans-serif;
+    font-size:14px; font-weight:600; cursor:pointer;
+    transition:background .2s; letter-spacing:.01em;
+  }
+  .gen-btn:hover { background:var(--teal-lt); }
+  .gen-btn:disabled { background:#9ca3af; cursor:not-allowed; }
+
+  .error-msg { margin-top:14px; padding:10px 14px; background:#fee2e2;
+    border:1px solid #fecaca; border-radius:8px; font-size:12px; color:#991b1b; display:none; }
+  .error-msg.show { display:block; }
+
+  /* ── LOADING ── */
+  #loading { display:none; flex-direction:column; align-items:center; gap:14px; }
+  #loading.show { display:flex; }
+  .spinner { width:36px; height:36px; border:3px solid var(--teal-mid);
+    border-top-color:var(--teal); border-radius:50%; animation:spin .7s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .loading-text { font-size:13px; color:var(--muted); }
+
+  /* ── HIDE/SHOW ── */
+  .hidden { display:none !important; }
+</style>
+</head>
+<body>
+
+<!-- UPLOAD UI -->
+<div id="uploadPage" class="upload-wrap">
+  <div class="upload-logo">
+    <div class="upload-logo-mark"><svg viewBox="0 0 10 10"><circle cx="5" cy="5" r="4.5"/></svg></div>
+    <span class="upload-logo-name">Reku</span>
+  </div>
+
+  <div class="upload-card">
+    <h1>Treasury Report Generator</h1>
+    <p>Upload file Excel harian, lalu klik Generate.<br>Dashboard siap di-print ke PDF dalam hitungan detik.</p>
+
+    <div class="drop-zone" id="dropZone">
+      <input type="file" id="fileInput" accept=".xlsx,.xls">
+      <div class="drop-icon">📊</div>
+      <div class="drop-title">Klik atau drag file Excel ke sini</div>
+      <div class="drop-sub">Format: .xlsx — file harian Treasury Reku</div>
+    </div>
+
+    <div class="file-info" id="fileInfo">
+      <span class="file-icon">📄</span>
+      <div>
+        <div class="file-name" id="fileName">—</div>
+        <div class="file-size" id="fileSize">—</div>
+      </div>
+    </div>
+
+    <div class="note-wrap">
+      <div class="note-label">Catatan tambahan (opsional)</div>
+      <textarea class="note-input" id="noteInput" rows="2"
+        placeholder="Misal: ada gangguan sistem pukul 14:00, atau kondisi market volatile hari ini..."></textarea>
+    </div>
+
+    <button class="gen-btn" id="genBtn" disabled>Generate Report</button>
+    <div class="error-msg" id="errorMsg"></div>
+  </div>
+</div>
+
+<!-- LOADING -->
+<div id="loading">
+  <div class="spinner"></div>
+  <div class="loading-text">Membaca data dan menyusun laporan...</div>
+</div>
+
+<script>
+// ── FILE HANDLING ──
+const fileInput = document.getElementById('fileInput');
+const dropZone  = document.getElementById('dropZone');
+const fileInfo  = document.getElementById('fileInfo');
+const fileName  = document.getElementById('fileName');
+const fileSize  = document.getElementById('fileSize');
+const genBtn    = document.getElementById('genBtn');
+const errorMsg  = document.getElementById('errorMsg');
+
+let selectedFile = null;
+
+fileInput.addEventListener('change', e => handleFile(e.target.files[0]));
+
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault(); dropZone.classList.remove('drag');
+  handleFile(e.dataTransfer.files[0]);
+});
+
+function handleFile(file) {
+  if (!file) return;
+  if (!file.name.match(/\.(xlsx|xls)$/i)) {
+    showError('File harus berformat .xlsx atau .xls');
+    return;
+  }
+  selectedFile = file;
+  fileName.textContent = file.name;
+  fileSize.textContent = (file.size / 1024).toFixed(1) + ' KB';
+  fileInfo.classList.add('show');
+  genBtn.disabled = false;
+  hideError();
+}
+
+genBtn.addEventListener('click', () => {
+  if (!selectedFile) return;
+  document.getElementById('uploadPage').classList.add('hidden');
+  document.getElementById('loading').classList.add('show');
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = parseExcel(e.target.result);
+      const note = document.getElementById('noteInput').value.trim();
+      const html = generateHTML(data, note);
+      openReport(html);
+    } catch(err) {
+      document.getElementById('loading').classList.remove('show');
+      document.getElementById('uploadPage').classList.remove('hidden');
+      showError('Gagal membaca file: ' + err.message);
+    }
+  };
+  reader.readAsArrayBuffer(selectedFile);
+});
+
+function showError(msg) { errorMsg.textContent = msg; errorMsg.classList.add('show'); }
+function hideError()    { errorMsg.classList.remove('show'); }
+
+// ── EXCEL PARSER ──
+function parseExcel(buffer) {
+  const wb = XLSX.read(buffer, { type:'array', cellDates:true });
+  const td = wb.Sheets['Treasury_Dashboard'];
+  const calc = wb.Sheets['Calculation'];
+  if (!td) throw new Error('Sheet "Treasury_Dashboard" tidak ditemukan');
+
+  const g = (sheet, r, c) => {
+    const cell = sheet[XLSX.utils.encode_cell({r:r-1,c:c-1})];
+    return cell ? cell.v : null;
+  };
+
+  // Date & shift
+  const rawDate = g(td,4,3);
+  const dateObj = rawDate instanceof Date ? rawDate : new Date(rawDate * 86400000 - 2209161600000);
+  const shift   = g(td,5,3) || '';
+
+  // KPI
+  const netRevenue      = g(td,5,5)  || 0;
+  const pretaxRevenue   = g(td,4,5)  || 0;
+  const hedgingPerf     = g(td,5,7)  || 0;
+  const feeRevenue      = g(td,23,2) || 0;
+  const winRate         = g(td,5,11) || 0;
+  const bprTU           = g(td,5,9)  || 0;
+  const sprTU           = g(td,5,10) || 0;
+
+  // Volume
+  const userBuyVol      = g(td,8,20)  || 0;
+  const userSellVol     = g(td,9,20)  || 0;
+  const totalUserVol    = g(td,10,20) || 0;
+  const tsyBuyVol       = g(td,13,20) || 0;
+  const tsySellVol      = g(td,14,20) || 0;
+  const totalUserTrades = g(td,11,20) || 0;
+
+  // Hedge counts
+  const hedgeBN    = (g(td,16,3) || 0) + (g(td,20,20)||0) + (g(td,21,20)||0) + (g(td,22,20)||0);
+  const hedgeGate  = g(td,17,3) || 0;
+  const hedgeTotal = g(td,19,3) || 0;
+
+  // Avg duration & overduration (from hedging breakdown)
+  const avgDuration  = g(td,23,15) || 0;
+  const overduration = g(td,23,16) || 0;
+  const profitRatio  = g(calc ? 'Calculation' : 'Treasury_Dashboard', 1, 61) || 0;
+
+  // Duty
+  const duty = [
+    g(td,8,3)  ? `BN Sub 1 — ${g(td,8,3)}`  : null,
+    g(td,9,3)  ? `BN Sub 2 — ${g(td,9,3)}`  : null,
+    g(td,10,3) ? `Gate — ${g(td,10,3)}`      : null,
+    g(td,11,3) ? `Liq. 1 — ${g(td,11,3)}`   : null,
+    g(td,12,3) ? `Liq. 2 — ${g(td,12,3)}`   : null,
+  ].filter(Boolean);
+
+  // Top 5 outperforming (rows 23-27, cols 5-8)
+  const outperform = [];
+  for (let r = 23; r <= 27; r++) {
+    const asset = g(td,r,5);
+    if (asset) outperform.push({ asset, netRev: g(td,r,6)||0, hedgePnl: g(td,r,7)||0, ratio: g(td,r,8)||0 });
+  }
+
+  // Top 5 underperforming (rows 31-35)
+  const underperform = [];
+  for (let r = 31; r <= 35; r++) {
+    const asset = g(td,r,5);
+    if (asset) underperform.push({ asset, netRev: g(td,r,6)||0, hedgePnl: g(td,r,7)||0, ratio: g(td,r,8)||0 });
+  }
+
+  // Volume per 30 min (rows 4-19, cols 27-32)
+  const volumeSlots = [];
+  for (let r = 4; r <= 19; r++) {
+    const label  = g(td,r,27);
+    const buyVol = g(td,r,30) || 0;
+    const selVol = g(td,r,31) || 0;
+    if (label !== null) volumeSlots.push({ label: String(label).substring(0,5), buyVol, selVol });
+  }
+
+  return {
+    dateObj, shift, netRevenue, pretaxRevenue, hedgingPerf, feeRevenue,
+    winRate, bprTU, sprTU, userBuyVol, userSellVol, totalUserVol,
+    tsyBuyVol, tsySellVol, totalUserTrades,
+    hedgeBN, hedgeGate, hedgeTotal, avgDuration, overduration, profitRatio,
+    duty, outperform, underperform, volumeSlots
+  };
+}
+
+// ── HELPERS ──
+function fmt(n, decimals=0) {
+  if (n === null || n === undefined || isNaN(n)) return '—';
+  const abs = Math.abs(n);
+  const sign = n < 0 ? '-' : '';
+  if (abs >= 1e9)  return sign + 'Rp' + (abs/1e9).toFixed(2)  + ' M';
+  if (abs >= 1e6)  return sign + 'Rp' + (abs/1e6).toFixed(2)  + ' Jt';
+  if (abs >= 1e3)  return sign + 'Rp' + (abs/1e3).toFixed(0)  + ' Rb';
+  return sign + 'Rp' + abs.toFixed(decimals);
+}
+function pct(n) { return (n*100).toFixed(2) + '%'; }
+function fmtDate(d) {
+  const days = ['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
+  const months = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+  return `${days[d.getDay()]}, ${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+// ── HIGHLIGHTS GENERATOR ──
+function buildHighlights(d, note) {
+  const hl = [];
+
+  // 1. Win Rate
+  const wr = d.winRate * 100;
+  if (wr >= 80) {
+    hl.push({ type:'ok', icon:'✅', title:'Win Rate tinggi',
+      desc:`${wr.toFixed(2)}% hedge mendapat harga lebih baik dari user — buy lebih murah, sell lebih mahal` });
+  } else {
+    hl.push({ type:'warn', icon:'⚠️', title:'Win Rate di bawah threshold',
+      desc:`${wr.toFixed(2)}% di bawah target 80% — perlu evaluasi kualitas eksekusi hedge` });
+  }
+
+  // 2. Buy vs Sell dominance
+  const total = d.userBuyVol + d.userSellVol;
+  const sellRatio = total > 0 ? (d.userSellVol / total * 100) : 50;
+  const buyRatio  = 100 - sellRatio;
+  if (Math.abs(sellRatio - buyRatio) > 10) {
+    const dom = sellRatio > buyRatio ? 'jual' : 'beli';
+    const domVol  = sellRatio > buyRatio ? fmt(d.userSellVol) : fmt(d.userBuyVol);
+    const recVol  = sellRatio > buyRatio ? fmt(d.userBuyVol)  : fmt(d.userSellVol);
+    const domPct  = sellRatio > buyRatio ? sellRatio.toFixed(0) : buyRatio.toFixed(0);
+    const recPct  = (100 - parseFloat(domPct)).toFixed(0);
+    hl.push({ type:'info', icon:'📊', title:`Volume ${dom} dominan`,
+      desc:`Volume ${dom} user (${domVol}) lebih besar dari ${dom==='jual'?'beli':'jual'} (${recVol}), rasio ${domPct}:${recPct}` });
+  } else {
+    hl.push({ type:'info', icon:'📊', title:'Volume seimbang',
+      desc:`Buy (${fmt(d.userBuyVol)}) dan Sell (${fmt(d.userSellVol)}) relatif seimbang hari ini, rasio ${buyRatio.toFixed(0)}:${sellRatio.toFixed(0)}` });
+  }
+
+  // 3. Top outperformer
+  if (d.outperform.length > 0) {
+    const top3 = d.outperform.slice(0,3).map(a => `${a.asset} (${fmt(a.netRev)})`).join(', ');
+    hl.push({ type:'ok', icon:'🏆', title:'Top outperformer',
+      desc: top3 });
+  }
+
+  // 4. Underperformer
+  if (d.underperform.length > 0) {
+    const bot3 = d.underperform.slice(0,3).map(a => `${a.asset} (${fmt(a.netRev)})`).join(', ');
+    hl.push({ type:'warn', icon:'⚠️', title:'Underperformer terbesar',
+      desc: bot3 });
+  }
+
+  // 5. Overduration OR peak volume OR custom note
+  if (note) {
+    hl.push({ type:'info', icon:'📌', title:'Catatan hari ini', desc: note });
+  } else if (d.overduration > 0) {
+    hl.push({ type:'warn', icon:'⏱️', title:'Terdapat overduration',
+      desc:`${d.overduration} transaksi hedge melebihi durasi normal — perlu ditindaklanjuti` });
+  } else {
+    // peak volume slot
+    const peak = d.volumeSlots.reduce((a,b) => (a.buyVol+a.selVol) > (b.buyVol+b.selVol) ? a : b, d.volumeSlots[0]);
+    if (peak) {
+      const peakTotal = fmt(peak.buyVol + peak.selVol);
+      hl.push({ type:'info', icon:'⏰', title:`Peak volume ${peak.label}`,
+        desc:`Total ${peakTotal} — buy ${fmt(peak.buyVol)}, sell ${fmt(peak.selVol)}` });
+    }
+  }
+
+  return hl.slice(0,5);
+}
+
+// ── CHART BARS ──
+function buildBars(slots) {
+  const maxVol = Math.max(...slots.map(s => s.buyVol + s.selVol), 1);
+  return slots.map(s => {
+    const buyH = Math.max(Math.round((s.buyVol / maxVol) * 88), 1);
+    const selH = Math.max(Math.round((s.selVol / maxVol) * 88), 1);
+    return `<div class="bc"><div class="bp"><div class="b buy" style="height:${buyH}px"></div><div class="b sell" style="height:${selH}px"></div></div><span class="bl">${s.label}</span></div>`;
+  }).join('');
+}
+
+// ── HTML GENERATOR ──
+function generateHTML(d, note) {
+  const highlights = buildHighlights(d, note);
+  const wr = (d.winRate * 100).toFixed(2);
+  const bnPct   = d.hedgeTotal > 0 ? (d.hedgeBN   / d.hedgeTotal * 100).toFixed(1) : 0;
+  const gatePct = d.hedgeTotal > 0 ? (d.hedgeGate / d.hedgeTotal * 100).toFixed(1) : 0;
+
+  const hlHTML = highlights.map(h => `
+    <div class="hl">
+      <div class="hl-icon ${h.type}">${h.icon}</div>
+      <div class="hl-body">
+        <div class="hl-title">${h.title}</div>
+        <div class="hl-desc">${h.desc}</div>
+      </div>
+    </div>`).join('');
+
+  const outHTML = d.outperform.map(a => `
+    <tr>
+      <td><span class="aname">${a.asset}</span></td>
+      <td class="r mono up">${fmt(a.netRev)}</td>
+      <td class="r"><span class="badge badge-up">${pct(a.ratio)}</span></td>
+    </tr>`).join('');
+
+  const underHTML = d.underperform.map(a => `
+    <tr>
+      <td><span class="aname">${a.asset}</span></td>
+      <td class="r mono dn">${fmt(a.netRev)}</td>
+      <td class="r"><span class="badge badge-dn">${pct(a.ratio)}</span></td>
+    </tr>`).join('');
+
+  const dutyHTML = d.duty.map(p => `<span class="duty">${p}</span>`).join('');
+  const barsHTML = buildBars(d.volumeSlots);
+
+  // peak for note box
+  const peak = d.volumeSlots.reduce((a,b) => (a.buyVol+a.selVol) > (b.buyVol+b.selVol) ? a : b, d.volumeSlots[0]);
+  const peakNote = peak ? `Peak volume terjadi pukul <strong>${peak.label}</strong> — total ${fmt(peak.buyVol + peak.selVol)} (buy ${fmt(peak.buyVol)}, sell ${fmt(peak.selVol)})` : '';
+
+  const shiftLabel = String(d.shift).includes('Malam') ? 'Malam (S1)' :
+                     String(d.shift).includes('Pagi')  ? 'Pagi (S2)'  :
+                     String(d.shift).includes('Sore')  ? 'Sore (S3)'  : String(d.shift);
+
+  return `<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<title>Treasury Report — ${fmtDate(d.dateObj)}</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --teal:#0e5c4a;--teal-lt:#1a8c6e;--teal-bg:#eaf6f2;--teal-mid:#d0ece4;
+    --green:#1db87a;--red:#d94f4f;--amber:#d97706;
+    --text:#111827;--muted:#6b7280;--muted-lt:#9ca3af;
+    --border:#e5e7eb;--border-lt:#f3f4f6;--bg:#f9fafb;--white:#fff;--dark:#0d2b22;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);
+    font-size:13px;padding:24px 28px 32px;min-width:960px;}
+  .syne{font-family:'Syne',sans-serif;}
+  .mono{font-family:'DM Mono',monospace;}
+
+  .hdr{display:flex;justify-content:space-between;align-items:center;
+    margin-bottom:18px;padding-bottom:16px;border-bottom:1px solid var(--border);}
+  .hdr-title{font-family:'Syne',sans-serif;font-size:20px;font-weight:700;letter-spacing:-.01em;}
+  .hdr-meta{display:flex;gap:8px;align-items:center;margin-top:5px;}
+  .hdr-date{font-size:12px;color:var(--muted);}
+  .chip{font-size:10px;font-weight:500;padding:2px 9px;border-radius:99px;letter-spacing:.03em;}
+  .chip-teal{background:var(--teal-bg);color:var(--teal);border:1px solid var(--teal-mid);}
+  .chip-amber{background:#fffbeb;color:var(--amber);border:1px solid #fde68a;}
+  .logo{display:flex;align-items:center;gap:7px;}
+  .logo-mark{width:28px;height:28px;background:var(--teal);border-radius:8px;
+    display:flex;align-items:center;justify-content:center;}
+  .logo-mark svg{width:14px;fill:white;}
+  .logo-name{font-family:'Syne',sans-serif;font-size:18px;font-weight:700;color:var(--teal);letter-spacing:-.02em;}
+
+  .kpi-banner{display:grid;grid-template-columns:repeat(4,1fr);
+    background:var(--dark);border-radius:12px;overflow:hidden;margin-bottom:16px;}
+  .kpi{padding:16px 20px;border-right:1px solid rgba(255,255,255,.07);position:relative;}
+  .kpi:last-child{border-right:none;}
+  .kpi::after{content:'';position:absolute;bottom:0;left:20px;right:20px;height:2px;border-radius:99px;}
+  .kpi:nth-child(1)::after{background:var(--green);}
+  .kpi:nth-child(2)::after{background:#60a5fa;}
+  .kpi:nth-child(3)::after{background:#a78bfa;}
+  .kpi:nth-child(4)::after{background:#34d399;}
+  .kpi-lbl{font-size:10px;color:rgba(255,255,255,.4);text-transform:uppercase;
+    letter-spacing:.07em;margin-bottom:8px;font-weight:500;}
+  .kpi-val{font-family:'DM Mono',monospace;font-size:22px;font-weight:500;line-height:1;color:var(--green);}
+  .kpi-val.blue{color:#93c5fd;} .kpi-val.purple{color:#c4b5fd;} .kpi-val.white{color:#f9fafb;}
+  .kpi-sub{font-size:10px;color:rgba(255,255,255,.28);margin-top:5px;}
+
+  .grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:14px;}
+  .grid-2{display:grid;grid-template-columns:1.25fr 1fr;gap:14px;}
+
+  .card{background:var(--white);border:1px solid var(--border);border-radius:12px;padding:18px;}
+  .card-title{font-family:'Syne',sans-serif;font-size:12px;font-weight:600;
+    letter-spacing:.01em;margin-bottom:2px;}
+  .card-sub{font-size:11px;color:var(--muted-lt);margin-bottom:12px;}
+
+  .stat{display:flex;justify-content:space-between;align-items:center;
+    padding:7px 0;border-bottom:1px solid var(--border-lt);}
+  .stat:last-child{border-bottom:none;}
+  .stat-lbl{font-size:12px;color:var(--muted);}
+  .stat-val{font-family:'DM Mono',monospace;font-size:12px;font-weight:500;}
+  .up{color:var(--green)!important;} .dn{color:var(--red)!important;}
+  .badge{font-size:10px;font-weight:500;padding:1px 7px;border-radius:99px;}
+  .badge-up{background:#d1fae5;color:#065f46;}
+  .badge-dn{background:#fee2e2;color:#991b1b;}
+  .sdiv{border:none;border-top:1px solid var(--border-lt);margin:12px 0;}
+  .sec-lbl{font-size:10px;color:var(--muted-lt);font-weight:600;letter-spacing:.05em;
+    text-transform:uppercase;margin-bottom:7px;}
+  .duty-wrap{display:flex;gap:5px;flex-wrap:wrap;}
+  .duty{background:var(--teal-bg);color:var(--teal);font-size:10.5px;font-weight:500;
+    padding:3px 9px;border-radius:6px;border:1px solid var(--teal-mid);}
+
+  .wr-num{font-family:'DM Mono',monospace;font-size:40px;font-weight:500;
+    color:var(--teal);line-height:1;}
+  .wr-lbl{font-size:10px;color:var(--muted);margin-top:3px;margin-bottom:12px;}
+  .wr-bar-bg{width:100%;height:6px;background:var(--border);border-radius:99px;overflow:hidden;margin-bottom:3px;}
+  .wr-bar-fill{height:100%;border-radius:99px;background:linear-gradient(90deg,var(--teal-lt),var(--green));}
+  .wr-bar-mm{display:flex;justify-content:space-between;font-size:9px;color:var(--muted-lt);}
+  .xbar{display:flex;height:6px;border-radius:99px;overflow:hidden;gap:2px;margin:8px 0 6px;}
+  .xbar-bn{background:var(--teal);border-radius:99px 0 0 99px;}
+  .xbar-gate{background:var(--teal-lt);opacity:.7;border-radius:0 99px 99px 0;}
+  .xleg-row{display:flex;justify-content:space-between;}
+  .xleg{font-size:11px;color:var(--muted);display:flex;align-items:center;gap:5px;}
+  .xleg-dot{width:7px;height:7px;border-radius:2px;display:inline-block;}
+
+  .hl-list{display:flex;flex-direction:column;}
+  .hl{display:flex;align-items:flex-start;gap:10px;padding:9px 0;border-bottom:1px solid var(--border-lt);}
+  .hl:last-child{border-bottom:none;padding-bottom:0;}
+  .hl:first-child{padding-top:0;}
+  .hl-icon{width:26px;height:26px;border-radius:7px;display:flex;align-items:center;
+    justify-content:center;font-size:13px;flex-shrink:0;margin-top:1px;}
+  .hl-icon.ok{background:#d1fae5;} .hl-icon.warn{background:#fef3c7;} .hl-icon.info{background:#dbeafe;}
+  .hl-title{font-weight:600;font-size:12px;color:var(--text);margin-bottom:1px;}
+  .hl-desc{font-size:11px;color:var(--muted);line-height:1.5;}
+
+  .tbl{width:100%;border-collapse:collapse;}
+  .tbl th{font-size:10px;font-weight:600;color:var(--muted-lt);text-align:left;
+    padding:0 0 8px;border-bottom:1px solid var(--border);text-transform:uppercase;letter-spacing:.05em;}
+  .tbl th.r,.tbl td.r{text-align:right;}
+  .tbl td{padding:7px 0;border-bottom:1px solid var(--border-lt);font-size:12px;}
+  .tbl tr:last-child td{border-bottom:none;}
+  .aname{font-weight:600;font-family:'Syne',sans-serif;font-size:12px;}
+
+  .chart-legend{display:flex;gap:14px;margin-bottom:8px;}
+  .cleg{font-size:10px;color:var(--muted);display:flex;align-items:center;gap:5px;}
+  .cleg-dot{width:8px;height:8px;border-radius:2px;}
+  .chart-body{display:flex;gap:8px;}
+  .y-axis{display:flex;flex-direction:column;justify-content:space-between;
+    padding-bottom:18px;padding-right:2px;}
+  .y-lbl{font-size:9px;color:var(--muted-lt);white-space:nowrap;text-align:right;}
+  .bars{display:flex;align-items:flex-end;gap:3px;height:88px;flex:1;}
+  .bc{display:flex;flex-direction:column;align-items:center;flex:1;height:100%;justify-content:flex-end;gap:3px;}
+  .bp{display:flex;gap:1px;align-items:flex-end;width:100%;}
+  .b{flex:1;border-radius:2px 2px 0 0;min-height:1px;}
+  .b.buy{background:var(--teal-lt);} .b.sell{background:#6366f1;opacity:.75;}
+  .bl{font-size:8px;color:var(--muted-lt);white-space:nowrap;}
+  .peak-box{margin-top:10px;padding:8px 12px;background:var(--teal-bg);
+    border:1px solid var(--teal-mid);border-radius:8px;font-size:11px;color:var(--teal);line-height:1.6;}
+
+  .footer{margin-top:16px;padding-top:12px;border-top:1px solid var(--border);
+    display:flex;justify-content:space-between;align-items:center;}
+  .footer-duty{display:flex;gap:5px;flex-wrap:wrap;}
+  .footer-gen{font-size:10px;color:var(--muted-lt);}
+
+  @media print {
+    body{padding:16px 20px;background:white;}
+    @page{size:A4 landscape;margin:12mm;}
+  }
+</style>
+</head>
+<body>
+
+<div class="hdr">
+  <div>
+    <div class="hdr-title syne">Treasury Daily Performance Report</div>
+    <div class="hdr-meta">
+      <span class="hdr-date">${fmtDate(d.dateObj)}</span>
+      <span class="chip chip-teal">Executive Summary</span>
+      ${shiftLabel ? `<span class="chip chip-amber">${shiftLabel}</span>` : ''}
+    </div>
+  </div>
+  <div class="logo">
+    <div class="logo-mark"><svg viewBox="0 0 10 10"><circle cx="5" cy="5" r="4.5"/></svg></div>
+    <span class="logo-name">Reku</span>
+  </div>
+</div>
+
+<div class="kpi-banner">
+  <div class="kpi">
+    <div class="kpi-lbl">Est. Net Revenue</div>
+    <div class="kpi-val">${fmt(d.netRevenue)}</div>
+    <div class="kpi-sub">Pretax: ${fmt(d.pretaxRevenue)}</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-lbl">Fee Revenue</div>
+    <div class="kpi-val blue">${fmt(d.feeRevenue)}</div>
+    <div class="kpi-sub">dari total volume user</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-lbl">Hedging Performance</div>
+    <div class="kpi-val purple">${fmt(d.hedgingPerf)}</div>
+    <div class="kpi-sub">realized hedge P&L</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-lbl">Win Rate</div>
+    <div class="kpi-val white">${wr}%</div>
+    <div class="kpi-sub">% hedge dengan harga lebih baik dari user</div>
+  </div>
+</div>
+
+<div class="grid-3">
+
+  <div class="card">
+    <div class="card-title">Volume Summary</div>
+    <div class="card-sub">Ringkasan aktivitas transaksi hari ini</div>
+    <div class="stat"><span class="stat-lbl">Total Volume User</span><span class="stat-val">${fmt(d.totalUserVol)}</span></div>
+    <div class="stat"><span class="stat-lbl">User Buy Volume</span><span class="stat-val up">${fmt(d.userBuyVol)}</span></div>
+    <div class="stat"><span class="stat-lbl">User Sell Volume</span><span class="stat-val dn">${fmt(d.userSellVol)}</span></div>
+    <div class="stat"><span class="stat-lbl">Treasury Buy Volume</span><span class="stat-val">${fmt(d.tsyBuyVol)}</span></div>
+    <div class="stat"><span class="stat-lbl">Treasury Sell Volume</span><span class="stat-val">${fmt(d.tsySellVol)}</span></div>
+    <div class="stat"><span class="stat-lbl">Total Transaksi User</span><span class="stat-val">${Math.round(d.totalUserTrades)} transaksi</span></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Hedge Breakdown</div>
+    <div class="card-sub">Kualitas dan distribusi eksekusi hedge</div>
+    <div style="display:flex;flex-direction:column;align-items:center;padding:4px 0 12px">
+      <div class="wr-num">${wr}</div>
+      <div class="wr-lbl">Win Rate (%)</div>
+      <div class="wr-bar-bg" style="width:100%"><div class="wr-bar-fill" style="width:${wr}%"></div></div>
+      <div class="wr-bar-mm" style="width:100%"><span>0%</span><span>100%</span></div>
+    </div>
+    <hr class="sdiv">
+    <div class="sec-lbl">Distribusi Exchange</div>
+    <div class="xbar">
+      <div class="xbar-bn"   style="width:${bnPct}%"></div>
+      <div class="xbar-gate" style="width:${gatePct}%"></div>
+    </div>
+    <div class="xleg-row">
+      <span class="xleg"><span class="xleg-dot" style="background:var(--teal)"></span>Binance &nbsp;<strong>${Math.round(d.hedgeBN)} (${bnPct}%)</strong></span>
+      <span class="xleg"><span class="xleg-dot" style="background:var(--teal-lt);opacity:.7"></span>Gate.io &nbsp;<strong>${Math.round(d.hedgeGate)} (${gatePct}%)</strong></span>
+    </div>
+    <hr class="sdiv">
+    <div class="stat"><span class="stat-lbl">Rata-rata durasi hedge</span><span class="stat-val">${Math.round(d.avgDuration)} detik</span></div>
+    <div class="stat"><span class="stat-lbl">Overduration</span><span class="stat-val ${d.overduration > 0 ? 'dn' : 'up'}">${Math.round(d.overduration)} transaksi</span></div>
+    <div class="stat"><span class="stat-lbl">Profit Ratio</span><span class="stat-val">${(d.profitRatio*100).toFixed(3)}%</span></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Highlights</div>
+    <div class="card-sub">Ringkasan kondisi hari ini untuk manajemen</div>
+    <div class="hl-list">${hlHTML}</div>
+  </div>
+
+</div>
+
+<div class="grid-2">
+
+  <div class="card">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:28px">
+      <div>
+        <div class="card-title" style="margin-bottom:2px">Top 5 Outperforming Assets</div>
+        <div class="card-sub">Net Est. Profit tertinggi hari ini</div>
+        <table class="tbl">
+          <thead><tr><th>Asset</th><th class="r">Net Revenue</th><th class="r">Profit Ratio</th></tr></thead>
+          <tbody>${outHTML}</tbody>
+        </table>
+      </div>
+      <div>
+        <div class="card-title" style="margin-bottom:2px">Top 5 Underperforming Assets</div>
+        <div class="card-sub">Net Revenue negatif terbesar hari ini</div>
+        <table class="tbl">
+          <thead><tr><th>Asset</th><th class="r">Net Revenue</th><th class="r">Profit Ratio</th></tr></thead>
+          <tbody>${underHTML}</tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Volume per 30 Menit</div>
+    <div class="card-sub">Buy vs Sell — full day (IDR)</div>
+    <div class="chart-legend">
+      <span class="cleg"><span class="cleg-dot" style="background:var(--teal-lt)"></span>Buy</span>
+      <span class="cleg"><span class="cleg-dot" style="background:#6366f1;opacity:.75"></span>Sell</span>
+    </div>
+    <div class="chart-body">
+      <div class="y-axis">
+        <span class="y-lbl">Max</span>
+        <span class="y-lbl">50%</span>
+        <span class="y-lbl">0</span>
+      </div>
+      <div class="bars">${barsHTML}</div>
+    </div>
+    <div class="peak-box">📈 ${peakNote}</div>
+  </div>
+
+</div>
+
+${dutyHTML ? `
+<div class="footer">
+  <div>
+    <div class="sec-lbl" style="margin-bottom:5px">Petugas Shift</div>
+    <div class="footer-duty">${dutyHTML}</div>
+  </div>
+  <div class="footer-gen">Digenerate otomatis dari data harian Treasury Reku</div>
+</div>` : ''}
+
+</body></html>`;
+}
+
+// ── OPEN REPORT ──
+function openReport(html) {
+  const blob = new Blob([html], { type:'text/html' });
+  const url  = URL.createObjectURL(blob);
+  window.open(url, '_blank');
+  setTimeout(() => {
+    document.getElementById('loading').classList.remove('show');
+    document.getElementById('uploadPage').classList.remove('hidden');
+  }, 800);
+}
+</script>
+</body>
+</html>
