@@ -603,7 +603,7 @@ function generateHTML(d, note) {
       <span class="xleg"><span class="xleg-dot" style="background:var(--teal-lt);opacity:.7"></span>Gate.io <strong>${Math.round(d.hedgeGate)} (${gatePct}%)</strong></span>
     </div>
     <hr class="sdiv">
-    <div class="stat"><span class="stat-lbl">Rata-rata durasi hedge</span><span class="stat-val">${avgDuration} detik</span></div>
+    <div class="stat"><span class="stat-lbl">Rata-rata durasi hedge</span><span class="stat-val">${d.avgDuration} detik</span></div>
     <div class="stat"><span class="stat-lbl">Overduration</span><span class="stat-val ${d.overduration>0?'dn':'up'}">${d.overduration} transaksi</span></div>
     <div class="stat"><span class="stat-lbl">Profit Ratio</span><span class="stat-val">${pct(d.profitRatio)}</span></div>
   </div>
