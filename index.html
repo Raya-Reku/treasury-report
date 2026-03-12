@@ -164,7 +164,7 @@ function parseExcel(buffer) {
   const netRevenue    = g(td,5,5)  || 0;
   const pretaxRevenue = calc ? (calc[XLSX.utils.encode_cell({r:0,c:39})]?.v || 0) : 0;
   const hedgingPerf   = g(td,5,7)  || 0;
-  const feeRevenue    = g(td,22,2) || g(td,23,2) || 0;
+  const feeRevenue    = g(td,23,2) || 0;
   const winRate       = g(td,5,11) || 0;
 
   // Crypto Volume
